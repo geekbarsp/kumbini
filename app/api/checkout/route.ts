@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getChatGPTUser } from '@/app/chatgpt-auth';
 import { prepareDatabase, type Product } from '@/db/repository';
 
 type CheckoutBody={customer?:{name?:string;email?:string;phone?:string;address?:string;city?:string;postalCode?:string};paymentMethod?:string;items?:Array<{productId:string;quantity:number}>};
@@ -18,8 +17,7 @@ export async function POST(request:NextRequest){
     const subtotal=products.reduce((sum,p)=>sum+p.price*(quantities.get(p.id)||0),0);
     const shipping=subtotal>=500000?0:18000;
     const id=`KMB-${crypto.randomUUID().slice(0,8).toUpperCase()}`;
-    const user=await getChatGPTUser();
-    const statements=[db.prepare('INSERT INTO orders (id,user_id,email,customer_name,phone,address,city,postal_code,payment_method,status,subtotal,shipping,total,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,user?.userId||null,c.email.trim(),c.name.trim(),c.phone.trim(),c.address.trim(),c.city.trim(),c.postalCode.trim(),body.paymentMethod,'confirmed',subtotal,shipping,subtotal+shipping,Date.now())];
+    const statements=[db.prepare('INSERT INTO orders (id,user_id,email,customer_name,phone,address,city,postal_code,payment_method,status,subtotal,shipping,total,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,null,c.email.trim().toLowerCase(),c.name.trim(),c.phone.trim(),c.address.trim(),c.city.trim(),c.postalCode.trim(),body.paymentMethod,'confirmed',subtotal,shipping,subtotal+shipping,Date.now())];
     for(const p of products){const q=quantities.get(p.id)!;statements.push(db.prepare('INSERT INTO order_items (order_id,product_id,product_name,unit_price,quantity) VALUES (?,?,?,?,?)').bind(id,p.id,p.name,p.price,q));statements.push(db.prepare('UPDATE products SET stock=stock-? WHERE id=? AND stock>=?').bind(q,p.id,q))}
     await db.batch(statements);
     return NextResponse.json({order:{id,total:subtotal+shipping,status:'confirmed'}});

@@ -1,6 +1,28 @@
-import { env } from 'cloudflare:workers';
+import { createClient, type Client, type InStatement } from '@libsql/client';
 
 export type Product = { id:string; slug:string; name:string; maker:string; category:string; description:string; story:string; image:string; price:number; stock:number; featured:number };
+
+let client:Client|undefined;
+function getClient(){
+  client??=createClient({url:process.env.TURSO_DATABASE_URL||'file:local.db',authToken:process.env.TURSO_AUTH_TOKEN});
+  return client;
+}
+
+class Statement{
+  args:unknown[]=[];
+  constructor(public sql:string){}
+  bind(...args:unknown[]){this.args=args;return this}
+  async run(){return getClient().execute({sql:this.sql,args:this.args as never[]})}
+  async first<T>(){const result=await this.run();return (result.rows[0] as T|undefined)??null}
+  async all<T>(){const result=await this.run();return {results:result.rows as unknown as T[]}}
+  toInput():InStatement{return {sql:this.sql,args:this.args as never[]}}
+}
+
+class Database{
+  prepare(sql:string){return new Statement(sql)}
+  async batch(statements:Statement[]){return getClient().batch(statements.map(s=>s.toInput()),'write')}
+}
+const database=new Database();
 
 const seed: Product[] = [
   {id:'chair-solihiya',slug:'solihiya-lounge-chair',name:'Solihiya Lounge Chair',maker:'Casa Marikit',category:'Home',description:'A low lounge chair hand-caned in traditional solihiya weave, with a solid Philippine mahogany frame.',story:'Built in Pampanga by a third-generation furniture workshop.',image:'https://images.unsplash.com/photo-1598300056393-4aac492f4344?auto=format&fit=crop&w=1000&q=85',price:1280000,stock:8,featured:1},
@@ -14,7 +36,7 @@ const seed: Product[] = [
 ];
 
 export async function prepareDatabase(){
-  const db=env.DB;
+  const db=database;
   await db.batch([
     db.prepare('CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, maker TEXT NOT NULL, category TEXT NOT NULL, description TEXT NOT NULL, story TEXT NOT NULL, image TEXT NOT NULL, price INTEGER NOT NULL, stock INTEGER NOT NULL DEFAULT 0, featured INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)'),
     db.prepare('CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, user_id TEXT, email TEXT NOT NULL, customer_name TEXT NOT NULL, phone TEXT NOT NULL, address TEXT NOT NULL, city TEXT NOT NULL, postal_code TEXT NOT NULL, payment_method TEXT NOT NULL, status TEXT NOT NULL DEFAULT \'confirmed\', subtotal INTEGER NOT NULL, shipping INTEGER NOT NULL, total INTEGER NOT NULL, created_at INTEGER NOT NULL)'),
