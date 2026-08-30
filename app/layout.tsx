@@ -13,6 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://kumbini-filipino-craft.lilyeverson083.chatgpt.site'),
   title: 'Kumbini — Filipino craft, made meaningfully',
   description: 'A considered collection of Filipino craft, everyday objects, and modern heirlooms.',
   openGraph: {
